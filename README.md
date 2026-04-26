@@ -1,10 +1,25 @@
 # obsidian-parse
 
-Extract knowledge graph metadata from Obsidian-style markdown vaults.
+[![PyPI version](https://img.shields.io/pypi/v/obsidian-parse)](https://pypi.org/project/obsidian-parse/)
+[![Python versions](https://img.shields.io/pypi/pyversions/obsidian-parse)](https://pypi.org/project/obsidian-parse/)
+[![License](https://img.shields.io/pypi/l/obsidian-parse)](https://github.com/agent-hanju/obsidian-parse/blob/main/LICENSE)
 
-A helper library for Obsidian parsing — covering only what standard code can't: Obsidian-specific syntax (wikilinks, embeds, nested tags), vault ignore rules, shortest-path link resolution, and graph output. Filesystem traversal, text search, and other general-purpose tasks are intentionally left to the caller.
+If you're building tools on top of an Obsidian vault — graph visualizers, backlink finders, migration scripts, or second-brain analytics — obsidian-parse gives you the structured data to work with.
 
-Parses `.md`, `.canvas`, and `.base` files to extract wikilinks, embeds, tags, and frontmatter — then converts them into a D3-compatible graph structure for visualization or downstream analysis.
+Parses `.md`, `.canvas`, and `.base` files to extract wikilinks, embeds, tags, and frontmatter, then converts them into a D3-compatible knowledge graph. Covers Obsidian-specific syntax (wikilinks, embeds, nested tags, canvas nodes, vault ignore rules, shortest-path link resolution) and leaves everything else to the caller.
+
+---
+
+## Use Cases
+
+- **Knowledge graph visualization** — feed the D3 output directly into force-directed graph layouts
+- **Backlink analysis** — find all notes that link to a given note, detect orphaned notes
+- **Tag auditing** — enumerate all tags used across a vault, expand nested hierarchies
+- **Vault migration tooling** — extract link structure before reformatting or moving notes
+- **Static site generation** — resolve wikilinks to build nav and cross-reference systems
+- **Second-brain analytics** — track how topics connect across your personal knowledge base
+
+---
 
 ## Installation
 
@@ -12,35 +27,78 @@ Parses `.md`, `.canvas`, and `.base` files to extract wikilinks, embeds, tags, a
 uv add obsidian-parse
 ```
 
-Or with pip:
-
 ```bash
 pip install obsidian-parse
 ```
+
+---
 
 ## Quick Start
 
 ```python
 from obsidian_parse import parse, results_to_d3
 
-# Parse an entire vault directory
-results = parse(["/path/to/your/vault"])
+results = parse(["/path/to/vault"])
 
-# Convert to D3 graph format
+for r in results:
+    print(r.file_id)            # "Project Ideas"
+    print(r.wikilink_targets)   # ["Daily Notes", "Tasks.canvas"]
+    print(r.tag_names)          # ["python", "python/tools", "status/done"]
+
 graph = results_to_d3(results)
-# graph = {"nodes": [...], "links": [...]}
+# → {"nodes": [...], "links": [...]}
 ```
 
-## What It Extracts
+---
 
-| Element | Syntax | Example |
-|---|---|---|
-| WikiLink | `[[Note]]` | `[[Project Ideas\|alias]]` |
-| Embed | `![[file]]` | `![[image.png]]` |
-| Tag | `#tagname` | `#topic/subtopic` |
-| Frontmatter | YAML header | `tags: [python, tools]` |
+## Output Examples
 
-Extraction is block-aware: wikilinks and tags inside code fences or HTML blocks are intentionally ignored.
+### ParseResult
+
+```python
+results = parse(["/vault"])
+r = results[0]
+
+r.file_id        # "Project Ideas"
+r.path           # PosixPath('/vault/Projects/Project Ideas.md')
+r.frontmatter    # {"tags": ["python", "tools"], "status": "active"}
+r.wikilink_targets  # ["Daily Notes", "Tasks.canvas", "References/Paper"]
+r.tag_names      # ["python", "tools", "python/tools"]  (body + frontmatter, merged)
+
+r.wikilinks[0]
+# WikiLink(target="Daily Notes", section="#Week 3", alias="this week", line=5, col=0)
+
+r.wikilinks[1]
+# WikiLink(target="Paper", section="^abc123", alias=None, line=12, col=4)
+```
+
+### D3 Graph
+
+```python
+graph = results_to_d3(results)
+```
+
+```json
+{
+  "nodes": [
+    {"id": "Project Ideas", "type": "file", "label": "Project Ideas"},
+    {"id": "Daily Notes",   "type": "file", "label": "Daily Notes"},
+    {"id": "Tasks.canvas",  "type": "file", "label": "Tasks.canvas"},
+    {"id": "#python",       "type": "tag",  "label": "python"},
+    {"id": "#python/tools", "type": "tag",  "label": "python/tools"}
+  ],
+  "links": [
+    {"source": "Project Ideas", "target": "Daily Notes",  "relation": "wikilink"},
+    {"source": "Project Ideas", "target": "Tasks.canvas", "relation": "wikilink"},
+    {"source": "Project Ideas", "target": "#python",      "relation": "tag"},
+    {"source": "#python/tools", "target": "#python",      "relation": "parent"}
+  ]
+}
+```
+
+Link `relation` values: `wikilink`, `embed`, `tag`, `parent` (tag hierarchy).
+
+---
 
 ## API
 
@@ -55,11 +113,13 @@ Raises:
 - `PathNotFoundError` — if none of the paths exist
 - `NoMarkdownFilesError` — if paths exist but contain no parseable files
 
+---
+
 ### `ParseResult`
 
 | Property | Type | Description |
 |---|---|---|
-| `file_id` | `str` | Filename used as node ID — `.md` extension omitted, `.canvas`/`.base` kept (e.g. `"Note"`, `"Board.canvas"`) |
+| `file_id` | `str` | Node ID — `.md` extension omitted, `.canvas`/`.base` kept (e.g. `"Note"`, `"Board.canvas"`) |
 | `path` | `Path` | Original file path |
 | `frontmatter` | `dict` | Parsed YAML frontmatter |
 | `wikilinks` | `list[WikiLink]` | Wikilinks with line/col positions |
@@ -68,6 +128,37 @@ Raises:
 | `wikilink_targets` | `list[str]` | Deduplicated link targets (computed) |
 | `embed_targets` | `list[str]` | Deduplicated embed targets (computed) |
 | `tag_names` | `list[str]` | Merged body + frontmatter tags (computed) |
+
+---
+
+### `WikiLink`
+
+| Field | Type | Description |
+|---|---|---|
+| `target` | `str` | Link target — `.md` extension omitted, other extensions kept |
+| `section` | `str \| None` | Heading (`#Section`) or block ref (`^id`) |
+| `alias` | `str \| None` | Display alias after `\|` |
+| `line` | `int \| None` | Source line number |
+| `col` | `int \| None` | Source column number |
+
+### `Embed`
+
+| Field | Type | Description |
+|---|---|---|
+| `target` | `str` | Embed target — `.md` extension omitted, other extensions kept |
+| `section` | `str \| None` | Heading or block ref |
+| `line` | `int \| None` | Source line number |
+| `col` | `int \| None` | Source column number |
+
+### `TagRef`
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `str` | Tag name without leading `#` |
+| `line` | `int \| None` | Source line number |
+| `col` | `int \| None` | Source column number |
+
+---
 
 ### `parse_file(file_path)`
 
@@ -83,43 +174,16 @@ Reads and parses a single `.md` file directly, returning a `ParseResult`.
 
 Parses raw markdown string content without reading from disk. Useful for testing or in-memory workflows.
 
-### `WikiLink`
-
-| Field | Type | Description |
-|---|---|---|
-| `target` | `str` | Link target — `.md` extension omitted, other extensions kept (e.g. `"Note"`, `"Board.canvas"`) |
-| `section` | `str \| None` | Heading (`#Section`) or block ref (`^id`) |
-| `alias` | `str \| None` | Display alias after `\|` |
-| `line` | `int \| None` | Source line number |
-| `col` | `int \| None` | Source column number |
-
-### `Embed`
-
-| Field | Type | Description |
-|---|---|---|
-| `target` | `str` | Embed target filename — `.md` extension omitted, other extensions kept |
-| `section` | `str \| None` | Heading or block id |
-| `line` | `int \| None` | Source line number |
-| `col` | `int \| None` | Source column number |
-
-### `TagRef`
-
-| Field | Type | Description |
-|---|---|---|
-| `name` | `str` | Tag name without leading `#` |
-| `line` | `int \| None` | Source line number |
-| `col` | `int \| None` | Source column number |
+---
 
 ### `find_file_by_id(vault_root, file_id, *, known_files=None)`
 
-Resolves a `file_id` to a path relative to `vault_root`.
+Resolves a `file_id` to a vault-relative path.
 
-- Bare stem or `"stem.md"` → matches `.md` files only
-- `"stem.canvas"` / `"stem.base"` → matches that exact extension
+- Bare stem or `"stem.md"` → searches `.md` files only
+- `"stem.canvas"` / `"stem.base"` → searches that exact extension
 
 When multiple files match, the shallowest path wins (Obsidian's shortest-path behavior). Pass `known_files` (from `discover_files()`) to avoid repeated filesystem traversal.
-
-Returns a `Path` relative to `vault_root`, or `None` if no file is found.
 
 ```python
 from pathlib import Path
@@ -130,58 +194,47 @@ find_file_by_id(vault, "Note")          # → Path("folder/Note.md") or None
 find_file_by_id(vault, "Board.canvas")  # → Path("Board.canvas") or None
 ```
 
+---
+
 ### `expand_nested_tag(tag)`
 
-Expands a nested tag string into all ancestor tags.
+Expands a nested tag into all ancestor segments.
 
 ```python
 from obsidian_parse.utils.tags import expand_nested_tag
 
-expand_nested_tag("a/b/c")    # ["a", "a/b", "a/b/c"]
-expand_nested_tag("/foo/bar") # ["/foo", "/foo/bar"]
-expand_nested_tag("a//b/c")  # ["a", "a//b", "a//b/c"]
+expand_nested_tag("topic/subtopic/leaf")  # ["topic", "topic/subtopic", "topic/subtopic/leaf"]
 ```
 
-The first `/` of each consecutive slash run is the hierarchy separator; remaining slashes become part of the next segment's name. A leading slash run is part of the first segment's name, never a separator.
+---
 
 ### `results_to_d3(results)`
 
-Converts a list of `ParseResult` into a dict:
+Converts a list of `ParseResult` into a D3-compatible dict with `nodes` and `links`.
 
-```python
-{
-    "nodes": [
-        {"id": "note-a", "type": "file", "label": "note-a"},
-        {"id": "#python", "type": "tag", "label": "python"},
-    ],
-    "links": [
-        {"source": "note-a", "target": "note-b", "relation": "wikilink"},
-        {"source": "note-a", "target": "#python", "relation": "tag"},
-        {"source": "#python/tools", "target": "#python", "relation": "parent"},
-    ]
-}
-```
-
-Link relations: `wikilink`, `embed`, `tag`, `parent` (tag hierarchy).
+---
 
 ## Supported File Types
 
-- **`.md`** — Markdown with YAML frontmatter
-- **`.canvas`** — Obsidian canvas JSON; extracts wikilinks from file-type nodes and all elements from text nodes
-- **`.base`** — Obsidian base files; recorded as graph nodes (filename/path only, no link extraction)
+| Extension | Parsing |
+|---|---|
+| `.md` | Frontmatter, wikilinks, embeds, tags |
+| `.canvas` | Wikilinks from file nodes; wikilinks + tags from text nodes |
+| `.base` | Registered as graph nodes (no link extraction) |
+
+Extraction is **block-aware**: wikilinks and tags inside code fences or HTML blocks are ignored.
+
+---
 
 ## Development
 
 ```bash
-# Install with dev dependencies
-uv sync --group dev
-
-# Lint
-ruff check src/
-
-# Type check
-mypy src/
+uv sync --group dev   # install with dev dependencies
+ruff check src/       # lint
+mypy src/             # type check
 ```
+
+---
 
 ## License
 
