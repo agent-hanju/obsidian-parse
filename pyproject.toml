@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "obsidian-parse"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lightweight Obsidian vault parser — extracts wikilinks, embeds, tags, and frontmatter with a single dependency (PyYAML). No Obsidian app required."
 readme = "README.md"
 requires-python = ">=3.10"

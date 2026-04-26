@@ -26,7 +26,7 @@ __all__ = [
 _DISPATCH: dict[str, Callable[[Path], ParseResult]] = {
     ".md": parse_markdown_file,
     ".canvas": parse_canvas_file,
-    ".base": lambda p: ParseResult(file_id=p.stem, path=p),
+    ".base": lambda p: ParseResult(file_id=p.stem + p.suffix, path=p),
 }
 
 

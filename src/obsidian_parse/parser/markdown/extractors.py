@@ -10,6 +10,12 @@ from obsidian_parse.parser.models import Embed, TagRef, WikiLink
 
 _T = TypeVar("_T")
 
+def _strip_extension(target: str) -> str:
+    if target.endswith(".md"):
+        return target[:-3]
+    return target
+
+
 # Pattern: [[Target]] or [[Target|Alias]]
 # Negative lookbehind (?<!!) excludes embeds (![[...]])
 # Group 1: target+section, Group 2: alias (optional)
@@ -89,7 +95,7 @@ def extract_wikilinks(
         raw = match.group(1).strip()
         m = _SECTION_RE.search(raw)
         section = m.group(1) if m else None
-        target = raw[: m.start()].strip() if m else raw
+        target = _strip_extension(raw[: m.start()].strip() if m else raw)
         alias = match.group(2).strip() if match.group(2) else None
         if not target:
             return None
@@ -110,7 +116,7 @@ def extract_embeds(
         raw = match.group(1).strip()
         m = _SECTION_RE.search(raw)
         section = m.group(1) if m else None
-        target = raw[: m.start()].strip() if m else raw
+        target = _strip_extension(raw[: m.start()].strip() if m else raw)
         return Embed(target=target, section=section, line=line, col=col) if target else None
 
     return _extract_positioned(content, blocks, line_offset, EMBED_PATTERN, factory)

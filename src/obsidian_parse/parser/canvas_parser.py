@@ -36,7 +36,8 @@ def parse_canvas_content(content: str, file_id: str, path: Path) -> ParseResult:
             raw_path = node.get("file", "")
             if not raw_path:
                 continue
-            target = Path(raw_path).stem
+            p = Path(raw_path)
+            target = p.stem if p.suffix == ".md" else p.stem + p.suffix
             if target and target not in seen_file_targets:
                 seen_file_targets.add(target)
                 wikilinks.append(WikiLink(target=target))
@@ -64,6 +65,6 @@ def parse_canvas_file(file_path: Path) -> ParseResult:
     """Read and parse an Obsidian .canvas file."""
     return parse_canvas_content(
         file_path.read_text(encoding="utf-8"),
-        file_path.stem,
+        file_path.stem + file_path.suffix,
         path=file_path,
     )

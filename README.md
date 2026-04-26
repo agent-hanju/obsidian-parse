@@ -59,7 +59,7 @@ Raises:
 
 | Property | Type | Description |
 |---|---|---|
-| `file_id` | `str` | Filename stem, used as node ID |
+| `file_id` | `str` | Filename used as node ID — `.md` extension omitted, `.canvas`/`.base` kept (e.g. `"Note"`, `"Board.canvas"`) |
 | `path` | `Path` | Original file path |
 | `frontmatter` | `dict` | Parsed YAML frontmatter |
 | `wikilinks` | `list[WikiLink]` | Wikilinks with line/col positions |
@@ -87,7 +87,7 @@ Parses raw markdown string content without reading from disk. Useful for testing
 
 | Field | Type | Description |
 |---|---|---|
-| `target` | `str` | Link target (note name) |
+| `target` | `str` | Link target — `.md` extension omitted, other extensions kept (e.g. `"Note"`, `"Board.canvas"`) |
 | `section` | `str \| None` | Heading (`#Section`) or block ref (`^id`) |
 | `alias` | `str \| None` | Display alias after `\|` |
 | `line` | `int \| None` | Source line number |
@@ -97,7 +97,7 @@ Parses raw markdown string content without reading from disk. Useful for testing
 
 | Field | Type | Description |
 |---|---|---|
-| `target` | `str` | Embed target filename |
+| `target` | `str` | Embed target filename — `.md` extension omitted, other extensions kept |
 | `section` | `str \| None` | Heading or block id |
 | `line` | `int \| None` | Source line number |
 | `col` | `int \| None` | Source column number |
@@ -109,6 +109,26 @@ Parses raw markdown string content without reading from disk. Useful for testing
 | `name` | `str` | Tag name without leading `#` |
 | `line` | `int \| None` | Source line number |
 | `col` | `int \| None` | Source column number |
+
+### `find_file_by_id(vault_root, file_id, *, known_files=None)`
+
+Resolves a `file_id` to a path relative to `vault_root`.
+
+- Bare stem or `"stem.md"` → matches `.md` files only
+- `"stem.canvas"` / `"stem.base"` → matches that exact extension
+
+When multiple files match, the shallowest path wins (Obsidian's shortest-path behavior). Pass `known_files` (from `discover_files()`) to avoid repeated filesystem traversal.
+
+Returns a `Path` relative to `vault_root`, or `None` if no file is found.
+
+```python
+from pathlib import Path
+from obsidian_parse import find_file_by_id
+
+vault = Path("/path/to/vault")
+find_file_by_id(vault, "Note")          # → Path("folder/Note.md") or None
+find_file_by_id(vault, "Board.canvas")  # → Path("Board.canvas") or None
+```
 
 ### `expand_nested_tag(tag)`
 
